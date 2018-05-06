@@ -22,10 +22,11 @@ cat(r_api, file = r_file_path)
 ```
 
 To do:
-[ ] Add generation of functions
-[ ] Add auto-generation of documentation
-[ ] S3 generics -- add named arguments if present for all methods
-[ ] Refactor some of the ugliness...
+
+- [ ] Add generation of functions
+- [ ] Add auto-generation of documentation
+- [ ] S3 generics -- add named arguments if present for all methods
+- [ ] Refactor some of the ugliness...
 
 
 
