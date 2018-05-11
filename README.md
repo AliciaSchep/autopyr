@@ -23,11 +23,14 @@ cat(r_api, file = r_file_path)
 
 To do:
 
-- [X] Add generation of functions
+- [x] Add generation of functions
 - [ ] Add generation of top-level objects
-- [ ] Add auto-generation of documentation
+- [x] Add auto-generation of documentation
+- [ ] Improve documentation: add links to doc websites optionally
 - [ ] S3 generics -- add named arguments if present for all methods
-- [ ] Refactor some of the ugliness...
+- [ ] Different prefixes for methods versus classes versus functions (because can have same name...)
+- [ ] Refactor some of the ugliness... 
+- [ ] Get auto-generated package to pass R CMD check???
 
 
 

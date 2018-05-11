@@ -1,7 +1,7 @@
 Undefined <- NULL
 inspect <- NULL
 
-#' @import reticulate glue purrr
+#' @import reticulate glue purrr readr
 is_py_class <- function(pyattr){
   py_str(py_get_attr(pyattr, "__class__")) == "<class 'type'>"
 }
@@ -78,12 +78,14 @@ get_all_class_args <- function(pyclass, pymodule){
    methods <- get_py_methods(pyclass, pymodule = pymodule)
    args2 <- purrr::flatten_chr(purrr::map(methods, ~get_args(py_get_attr(cl, .))))
    
-   out1 <- if (length(args1) > 0) paste(unique(args1), collapse = ",") else ""
-   out2 <- if (length(args2) > 0) paste(unique(args2), collapse = ",") else ""
-   c(out1, out2)
+   if (length(methods) > 0){
+     args2 <- c(args2, "...")
+   }
+   
+   paste(unique(c(args1, args2)), collapse = ",")
 }
 
-write_method_arglist <- function(pyfun, ignore_first = TRUE){
+write_method_arglist <- function(pyfun, ignore_first = TRUE, always_dots = FALSE){
   ixs <- if (ignore_first) 2 else 1
   args <- tryCatch(get_arg_spec(pyfun), error = function(e) NULL)
   if (is.null(args)) {
@@ -108,7 +110,7 @@ write_method_arglist <- function(pyfun, ignore_first = TRUE){
                                 paste0("r_to_py(",sanitize_arg(args$args[(mandatory + 1):len_args]),")"),
                                 sep = " = ", collapse = ", "))
   }
-  if (!is.null(args$varargs) || !is.null(args$varkw)){
+  if (!is.null(args$varargs) || !is.null(args$varkw) || always_dots) {
     out = add_comma_plus(out, "...")
     out2 = add_comma_plus(out2, "...")
   }
@@ -142,7 +144,7 @@ write_function <- function(pyfunc, module_name, pymodule, prefix ){
 write_s3_method <- function(pymethod, pyclass, pymodule, prefix, module_abbreviation){
   module_name <- py_get_attr(py_get_attr(pymodule,pyclass),"__module__")
   method_name <- glue::glue("{prefix}_{pymethod}.{module_name}.{pyclass}")
-  arg_lists <- write_method_arglist(py_get_attr(py_get_attr(pymodule,pyclass),pymethod))
+  arg_lists <- write_method_arglist(py_get_attr(py_get_attr(pymodule,pyclass),pymethod), always_dots = TRUE)
   docs <- glue::glue(readr::read_file(system.file("templates/s3_method.R", package = "autopyr")))
   outer_arg <- add_comma_if("pyr_object", arg_lists$outer)
   glue::glue(
