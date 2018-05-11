@@ -37,19 +37,19 @@ get_arg_spec <- function(pyfun){
   py_to_r(inspect$getfullargspec(pyfun))
 }
 
-add_comma_plus <- function(x, y){
-  if (x == ""){
+add_comma_plus <- function(x, y, space = TRUE){
+  if (x == "") {
     return(y)
   } else{
-    return(paste(x,y,sep = ", "))
+    return(paste(x,y,sep = if (space) ", " else ","))
   }
 }
 
-add_comma_if <- function(x, y){
-  if (y == ""){
+add_comma_if <- function(x, y, space = TRUE){
+  if (y == "") {
     return(x)
   } else{
-    return(paste(x,y,sep = ", "))
+    return(paste(x,y,sep = if (space) ", " else ","))
   }
 }
 
@@ -57,9 +57,36 @@ sanitize_arg <- function(x){
   paste0('`',x,'`')
 }
 
-write_method_arglist <- function(pyfun){
+get_args <- function(pyfun, ignore_first = TRUE){
+  out <- tryCatch(get_arg_spec(pyfun)$args, error = function(e) NULL)
+  if (!is.null(out)){
+    ixs <- if (ignore_first) 2 else 1
+    if (length(out) >= ixs) {
+      out <- out[ixs:length(out)]}
+    else { 
+      out <- NULL
+    }
+  }
+  return(out)
+}
+
+get_all_class_args <- function(pyclass, pymodule){
+   # Gets args for both the class itself and all methods...
+   cl <- py_get_attr(pymodule,pyclass)
+   args1 <- get_args(cl)
+  
+   methods <- get_py_methods(pyclass, pymodule = pymodule)
+   args2 <- purrr::flatten_chr(purrr::map(methods, ~get_args(py_get_attr(cl, .))))
+   
+   out1 <- if (length(args1) > 0) paste(unique(args1), collapse = ",") else ""
+   out2 <- if (length(args2) > 0) paste(unique(args2), collapse = ",") else ""
+   c(out1, out2)
+}
+
+write_method_arglist <- function(pyfun, ignore_first = TRUE){
+  ixs <- if (ignore_first) 2 else 1
   args <- tryCatch(get_arg_spec(pyfun), error = function(e) NULL)
-  if (is.null(args)){
+  if (is.null(args)) {
     warning(glue::glue("No signature found for {pyfun}"))
     return(list(inner = "", outer = ""))
   }
@@ -68,9 +95,9 @@ write_method_arglist <- function(pyfun){
   mandatory <- len_args - len_defaults
   out = ""
   out2 = ""
-  if (mandatory >= 2) {
-    out = paste(sanitize_arg(args$args[2:mandatory]), collapse = ",")
-    out2 = paste(paste0("r_to_py(",sanitize_arg(args$args[2:mandatory]),")"), collapse = ",")}
+  if (mandatory >= ixs) {
+    out = paste(sanitize_arg(args$args[ixs:mandatory]), collapse = ",")
+    out2 = paste(paste0("r_to_py(",sanitize_arg(args$args[ixs:mandatory]),")"), collapse = ",")}
   if (mandatory < len_args) {
     out <- add_comma_plus(out,
                           paste(sanitize_arg(args$args[(mandatory + 1):len_args]),
@@ -90,19 +117,23 @@ write_method_arglist <- function(pyfun){
 
 write_constructor <- function(pyclass, module_name, pymodule, prefix ){
   arg_lists <- write_method_arglist(py_get_attr(pymodule,pyclass))
+  params <- get_all_class_args(pyclass, pymodule)
   func_name <- glue::glue("{prefix}_{pyclass}")
+  docs <- glue::glue(readr::read_file(system.file("templates/constructor.R", package = "autopyr")))
   glue::glue(
-    "#' @export
+    "{docs}
     {func_name} <- function ({arg_lists$outer}) {{
     {module_name}$`{pyclass}`({arg_lists$inner})
     }}")
 }
 
 write_function <- function(pyfunc, module_name, pymodule, prefix ){
-  arg_lists <- write_method_arglist(py_get_attr(pymodule,pyfunc))
+  arg_lists <- write_method_arglist(py_get_attr(pymodule,pyfunc), ignore_first = FALSE)
+  params <- paste(get_args(py_get_attr(pymodule,pyfunc), ignore_first = FALSE),collapse = ",")
   func_name <- glue::glue("{prefix}_{pyfunc}")
+  docs <- glue::glue(readr::read_file(system.file("templates/function.R", package = "autopyr")))
   glue::glue(
-    "#' @export
+    "{docs}
     {func_name} <- function ({arg_lists$outer}) {{
     {module_name}$`{pyfunc}`({arg_lists$inner})
     }}")
@@ -112,10 +143,10 @@ write_s3_method <- function(pymethod, pyclass, pymodule, prefix, module_abbrevia
   module_name <- py_get_attr(py_get_attr(pymodule,pyclass),"__module__")
   method_name <- glue::glue("{prefix}_{pymethod}.{module_name}.{pyclass}")
   arg_lists <- write_method_arglist(py_get_attr(py_get_attr(pymodule,pyclass),pymethod))
-  #s3_doc <- readr::read_file(system.file("templates/s3_method.R", package = "autoreticulate"))
+  docs <- glue::glue(readr::read_file(system.file("templates/s3_method.R", package = "autopyr")))
   outer_arg <- add_comma_if("pyr_object", arg_lists$outer)
   glue::glue(
-    "#' @export
+    "{docs}
     {method_name} <- function ({outer_arg}) {{
     out <- pyr_object$`{pymethod}`({arg_lists$inner})
     out
